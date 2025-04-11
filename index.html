@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Prediction System</title>
+  <style>
+    :root {
+      --primary: #6e45e2;
+      --secondary: #88d3ce;
+      --accent: #ff7e5f;
+      --win: #4CAF50;
+      --loss: #F44336;
+      --pending: #FFC107;
+    }
+    
+    body {
+      font-family: 'Arial', sans-serif;
+      background: #0f0f1a;
+      color: white;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    
+    .dashboard {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      padding: 15px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .card-header {
+      font-size: 1.2rem;
+      margin-bottom: 10px;
+      color: var(--secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .prediction-display {
+      font-size: 2rem;
+      text-align: center;
+      margin: 15px 0;
+      font-weight: bold;
+    }
+    
+    .stats {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+    
+    .stat-item {
+      text-align: center;
+    }
+    
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+    }
+    
+    .win { color: var(--win); }
+    .loss { color: var(--loss); }
+    .pending { color: var(--pending); }
+    
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px;
+      margin-bottom: 8px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    
+    .refresh-btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      display: block;
+      width: 100%;
+      font-size: 1rem;
+      margin-top: 20px;
+      transition: all 0.3s;
+    }
+    
+    .refresh-btn:hover {
+      background: var(--accent);
+      transform: translateY(-2px);
+    }
+    
+    .confidence-meter {
+      height: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      margin: 10px 0;
+      overflow: hidden;
+    }
+    
+    .confidence-level {
+      height: 100%;
+      background: linear-gradient(90deg, #ff5e62, #ff9966);
+      border-radius: 4px;
+      width: 0%;
+    }
+    
+    @media (max-width: 600px) {
+      .dashboard {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1 style="text-align: center; margin-bottom: 20px;">AI Prediction System</h1>
+  
+  <div class="dashboard">
+    <div class="card">
+      <div class="card-header">
+        <i class="fas fa-clock"></i> Current Period
+      </div>
+      <div id="currentPeriod" style="font-size: 1.5rem; text-align: center;">Loading...</div>
+      <div style="text-align: center; margin-top: 10px;">
+        <i class="fas fa-hourglass-half"></i> <span id="timer">00:00</span>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <i class="fas fa-crystal-ball"></i> AI Prediction
+      </div>
+      <div id="prediction" class="prediction-display pending">ANALYZING...</div>
+      <div class="confidence-meter">
+        <div class="confidence-level" id="confidenceBar"></div>
+      </div>
+      <div style="text-align: center;" id="confidenceText">Calculating confidence...</div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <i class="fas fa-chart-line"></i> Performance Stats
+      </div>
+      <div class="stats">
+        <div class="stat-item">
+          <div>Wins</div>
+          <div class="stat-value win" id="totalWins">0</div>
+        </div>
+        <div class="stat-item">
+          <div>Losses</div>
+          <div class="stat-value loss" id="totalLosses">0</div>
+        </div>
+        <div class="stat-item">
+          <div>Accuracy</div>
+          <div class="stat-value" id="accuracy">0%</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <i class="fas fa-history"></i> Prediction History
+      </div>
+      <div id="history"></div>
+    </div>
+  </div>
+  
+  <button class="refresh-btn" onclick="updatePrediction()">
+    <i class="fas fa-sync-alt"></i> Refresh Data
+  </button>
+
+  <script>
+    // Game data and state
+    let historyData = [];
+    let lastFetchedPeriod = null;
+    let currentPeriod = null;
+    let totalWins = 0;
+    let totalLosses = 0;
+    let totalPredictions = 0;
+    let correctPredictions = 0;
+    
+    // Function to fetch game result
+    async function fetchGameResult() {
+      try {
+        const payload = {
+          pageSize: 10,
+          pageNo: 1,
+          typeId: 1,
+          language: 0,
+          random: "4a0522c6ecd8410496260e686be2a57c",
+          signature: "334B5E70A0C9B8918B0B15E517E2069C",
+          timestamp: Math.floor(Date.now() / 1000)
+        };
+
+        let response = await fetch("https://api.bdg88zf.com/api/webapi/GetNoaverageEmerdList", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        let data = await response.json();
+        let latestResult = data?.data?.list?.[0];
+        if (latestResult) {
+          return { 
+            period: latestResult.issueNumber, 
+            result: parseInt(latestResult.number),
+            timestamp: new Date().toLocaleTimeString()
+          };
+        } else {
+          throw new Error("No data found in the API response");
+        }
+      } catch (error) {
+        console.error("Error fetching game result:", error);
+        return null;
+      }
+    }
+
+    // Trend analysis function
+    function trendAnalysis(history) {
+      if (history.length === 0) return "BIG";
+      
+      // Simple pattern detection - if last 3 were BIG, predict SMALL and vice versa
+      const lastThree = history.slice(0, 3);
+      if (lastThree.length >= 3) {
+        const allBig = lastThree.every(item => item.prediction === "BIG");
+        const allSmall = lastThree.every(item => item.prediction === "SMALL");
+        
+        if (allBig) return "SMALL";
+        if (allSmall) return "BIG";
+      }
+      
+      // Default to random prediction if no clear pattern
+      return Math.random() > 0.5 ? "BIG" : "SMALL";
+    }
+
+    // Auto-predict function with confidence calculation
+    function autoPredict(history) {
+      const prediction = trendAnalysis(history);
+      
+      // Calculate confidence based on recent accuracy
+      const recentHistory = history.filter(item => item.resultStatus !== "PENDING");
+      if (recentHistory.length > 0) {
+        const correct = recentHistory.filter(item => item.resultStatus === "WIN").length;
+        const confidence = Math.min(95, Math.max(65, (correct / recentHistory.length) * 100));
+        return { 
+          type: prediction,
+          confidence: Math.round(confidence)
+        };
+      }
+      
+      return {
+        type: prediction,
+        confidence: 75 // Default confidence
+      };
+    }
+
+    // Function to update prediction
+    async function updatePrediction() {
+      let apiResult = await fetchGameResult();
+      
+      if (!apiResult) {
+        document.getElementById("prediction").textContent = "API ERROR";
+        document.getElementById("prediction").className = "prediction-display loss";
+        return;
+      }
+
+      if (apiResult.period !== lastFetchedPeriod) {
+        lastFetchedPeriod = apiResult.period;
+        currentPeriod = (BigInt(apiResult.period) + 1n).toString();
+        
+        // Update current period display
+        document.getElementById("currentPeriod").textContent = currentPeriod;
+        
+        // Make prediction for next period
+        const prediction = autoPredict(historyData);
+        
+        // Update prediction display
+        document.getElementById("prediction").textContent = prediction.type;
+        document.getElementById("prediction").className = "prediction-display pending";
+        document.getElementById("confidenceBar").style.width = `${prediction.confidence}%`;
+        document.getElementById("confidenceText").textContent = `Confidence: ${prediction.confidence}%`;
+        
+        // Add to history as pending
+        historyData.unshift({ 
+          period: currentPeriod, 
+          result: null, 
+          prediction: prediction.type, 
+          resultStatus: "PENDING",
+          timestamp: new Date().toLocaleTimeString(),
+          confidence: prediction.confidence
+        });
+        
+        // Check win/loss for previous prediction
+        if (historyData.length > 1 && historyData[1].resultStatus === "PENDING") {
+          checkWinLoss(apiResult, historyData[1]);
+        }
+        
+        updateHistory();
+      }
+      
+      // Update timer
+      updateTimer();
+    }
+    
+    // Function to update timer
+    function updateTimer() {
+      const now = new Date();
+      const seconds = now.getSeconds();
+      const remainingSeconds = 60 - seconds;
+      document.getElementById("timer").textContent = `00:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+
+    // Function to check win/loss for a specific prediction
+    function checkWinLoss(actualResult, predictionItem) {
+      if (!actualResult || !predictionItem) return;
+      
+      const actualType = actualResult.result >= 5 ? "BIG" : "SMALL";
+      predictionItem.resultStatus = (predictionItem.prediction === actualType) ? "WIN" : "LOSS";
+      predictionItem.result = actualResult.result;
+      predictionItem.actualType = actualType;
+      
+      updateStats();
+      updateHistory();
+    }
+
+    // Function to update stats
+    function updateStats() {
+      totalWins = historyData.filter(item => item.resultStatus === "WIN").length;
+      totalLosses = historyData.filter(item => item.resultStatus === "LOSS").length;
+      totalPredictions = totalWins + totalLosses;
+      
+      document.getElementById("totalWins").textContent = totalWins;
+      document.getElementById("totalLosses").textContent = totalLosses;
+      document.getElementById("accuracy").textContent = calculateAccuracy();
+    }
+
+    // Function to calculate accuracy
+    function calculateAccuracy() {
+      if (totalPredictions === 0) return "0%";
+      const accuracy = (totalWins / totalPredictions) * 100;
+      return `${accuracy.toFixed(1)}%`;
+    }
+
+    // Function to update history display
+    function updateHistory() {
+      let historyDiv = document.getElementById("history");
+      historyDiv.innerHTML = "";
+      
+      // Only show completed predictions (WIN/LOSS)
+      const completedPredictions = historyData.filter(item => 
+        item.resultStatus === "WIN" || item.resultStatus === "LOSS"
+      );
+      
+      if (completedPredictions.length === 0) {
+        historyDiv.innerHTML = "<div style='text-align: center; color: #666;'>No completed predictions yet</div>";
+        return;
+      }
+      
+      completedPredictions.forEach(item => {
+        let itemElement = document.createElement("div");
+        itemElement.className = `history-item ${item.resultStatus.toLowerCase()}`;
+        
+        itemElement.innerHTML = `
+          <div>
+            <strong>${item.period.slice(-5)}</strong> 
+            <span>${item.timestamp}</span>
+          </div>
+          <div>
+            <span>Predicted: ${item.prediction}</span>
+            <span> | Actual: ${item.actualType}</span>
+          </div>
+          <div>
+            <strong class="${item.resultStatus.toLowerCase()}">${item.resultStatus}</strong>
+            <span> (${item.confidence}%)</span>
+          </div>
+        `;
+        
+        historyDiv.appendChild(itemElement);
+      });
+    }
+    
+    // Initialize
+    updatePrediction();
+    setInterval(updateTimer, 1000);
+    setInterval(updatePrediction, 10000); // Update every 10 seconds
+  </script>
+  
+  <!-- Font Awesome for icons -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/js/all.min.js"></script>
+</body>
+</html>
